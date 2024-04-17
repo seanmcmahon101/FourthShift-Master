@@ -12,6 +12,8 @@ import os
 import pandas as pd
 import logging 
 import logging
+import numpy as np
+import cv2
 
 logging.basicConfig(filename='app.log', filemode='w', format='%(name)s - %(levelname)s - %(message)s')
 
@@ -30,6 +32,7 @@ def read_excel_file(file_path):
         exit(1)
 
     df = pd.read_excel(file_path)
+    print(f"Successfully read file '{file_path}'.")
 
     return df
 
@@ -172,8 +175,6 @@ def itpi_reset():
             print(f"Warning: Image '{image_path}' not found on screen.")
         time.sleep(1)  
 
-
-
 def detect_image_and_break(image_path, timeout=30, check_interval=1, confidence=0.8):
     """
     Continuously checks for an image on the screen and stops the process if the image is found.
@@ -200,56 +201,87 @@ def detect_image_and_break(image_path, timeout=30, check_interval=1, confidence=
 
         time.sleep(check_interval)
 
-def detect_color(region, target_color=(255, 0, 0), tolerance=10):
-    screenshot = pyautogui.screenshot(region=region)
-    for x in range(screenshot.width):
-        for y in range(screenshot.height // 8 * 7, screenshot.height):  # Start from the bottom 8th of the image
-            r, g, b = screenshot.getpixel((x, y))
-            if all(abs(c - tc) <= tolerance for c, tc in zip((r, g, b), target_color)):
-                return True
-    return False
-
+def is_red(pixel_coordinate, tolerance=10):
+    """
+    Checks if the pixel at the given coordinate is red.
+    
+    Args:
+        pixel_coordinate (tuple): The (x, y) coordinates of the pixel to check.
+        tolerance (int): The tolerance level for the color check.
+    
+    Returns:
+        bool: True if the pixel is red, False otherwise.
+    """
+    # Take a screenshot at the given pixel coordinate
+    screenshot = pyautogui.screenshot(region=(pixel_coordinate[0], pixel_coordinate[1], 1, 1))
+    image = np.array(screenshot)
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    
+    # Define the color red in BGR
+    red_bgr = np.array([0, 0, 255])
+    
+    # Get the color of the pixel
+    pixel_color = image[0, 0]
+    
+    # Check if the pixel color is within the tolerance for red
+    return np.all(np.abs(pixel_color - red_bgr) <= tolerance)
 
 def cimt_clear(customer):
     """
-    Clears the CIMT screen for a given customer.
+    Clears the CIMT screen for a given customer with exception handling.
     
     Args:
         customer (str): The customer's information to be cleared.
     """
-    cimt_reset()
-    pyautogui.typewrite(customer)
-    
-    print(f"Typing customer name: {customer}")
-    print(f"Clearing CIMT for customer '{customer}'...")
+    try:
+        cimt_reset()
+        pyautogui.typewrite(customer)
+        print(f"Typing customer name: {customer}")
+        print(f"Clearing CIMT for customer '{customer}'...")
 
-    screen_width, screen_height = pyautogui.size()
-    color_region = (0, 0, screen_width, screen_height)
+        red_pixel_coordinate = (1157, 1024)
 
-    while True:
-        if detect_color(color_region, target_color=(255, 0, 0)):
-            break
-        
-        pyautogui.press('enter')
-        print("Pressing 'enter'")
-        time.sleep(0.01)  
-
-        
         while True:
-            if detect_color(color_region, target_color=(255, 0, 0)):
-                print("Detected red breaking loop.")
+            if is_red(red_pixel_coordinate):
                 break
-            pyautogui.press('backspace')
-            #pyautogui.press('enter') commented out for testing
-            pyautogui.press('down')
-            print("Pressing 'down' key to navigate")
-            
-    logging.info("Red Detected, breaking loop.")        
-    print("Done.")
+            pyautogui.press('enter')
+            print("Pressing 'enter'")
+            time.sleep(0.01)  #adding delay stops FS from fucking up
+
+            while True:
+                if is_red(red_pixel_coordinate):
+                    print("Detected red, breaking loop.")
+                    break
+                pyautogui.press('backspace')
+                print("Pressing 'backspace' to clear")
+                #pyautogui.press('enter') #Commented out for testing
+                #print("Pressing 'enter' to confirm")
+                pyautogui.press('down')
+                print("Pressing 'down' key to navigate")
+                    
+            logging.info("Red detected, breaking loop.")
+            print("Done.")
+
+    except Exception as e:
+        logging.error(f"An error occurred: {e}")
+        print(f"An error occurred: {e}")
+
+def cimt_addition_with_clear():
+    """
+        Function to add parts into the CIMT screen.
+        Reads the excel file and uses the data to add parts into the CIMT screen.
+
+    """
+    #read and process the excel file
+    read_excel_file(df)  
+    for i in df.columns:
+        print(i)
+
 
 if __name__ == '__main__':
-    customer = 'ARGOCZ'
-    #df = read_excel_file('EXAMPLE.xlsx')
+    customer = 'ARGOCZ' #can be changed / tkinter needs to be able to manipulate
+    #df = read_excel_file('EXAMPLE.xlsx') #can be changed   #can be changed / tkinter needs to be able to manipulate
+    #columns = df.columns
     cimt_clear(customer)
     
-
+#Use Tkinter to select what function to call
